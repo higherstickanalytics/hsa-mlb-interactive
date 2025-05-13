@@ -3,30 +3,55 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
-# Load data
+# Paths to the files
 hitters_path = 'data/baseball_data/combined_hitters_data.csv'
 pitchers_path = 'data/baseball_data/combined_pitchers_data.csv'
 schedule_path = 'data/MLB_Schedule.csv'
 
-hitters_df = pd.read_csv(hitters_path, parse_dates=['Date'], dayfirst=False)
-pitchers_df = pd.read_csv(pitchers_path, parse_dates=['Date'], dayfirst=False)
+# Load the data
+hitters_df = pd.read_csv(hitters_path)
+pitchers_df = pd.read_csv(pitchers_path)
 schedule_df = pd.read_csv(schedule_path, parse_dates=['Date'], dayfirst=False)
 
-# App Title
-st.title("MLB Data Viewer with Pie and Time-Series Charts")
-st.write("Data from [Baseball Reference](https://www.baseball-reference.com/)")
+# Title of the app
+st.title("MLB Data Viewer")
 
-# Sidebar: select position
-position = st.sidebar.radio("Select Player Position", ['Hitter', 'Pitcher'])
+# Display the first 5 rows of each dataset
+st.subheader("First 5 Rows of Hitters Data")
+st.dataframe(hitters_df.head())
 
-if position == 'Hitter':
+st.subheader("First 5 Rows of Pitchers Data")
+st.dataframe(pitchers_df.head())
+
+st.subheader("First 5 Rows of MLB Schedule Data")
+st.dataframe(schedule_df.head())
+
+# Ensure min_date and max_date are valid dates
+min_date = pd.to_datetime(hitters_df['Date'].min(), errors='coerce')
+max_date = pd.to_datetime(hitters_df['Date'].max(), errors='coerce')
+
+# If either min_date or max_date is NaT (invalid), set reasonable defaults
+if pd.isna(min_date) or pd.isna(max_date):
+    st.error("Invalid date values found in the dataset. Please check the data.")
+    min_date = pd.to_datetime('2020-01-01')  # Set a default minimum date
+    max_date = pd.to_datetime('2025-12-31')  # Set a default maximum date
+
+# Sidebar: date filter
+start_date = pd.to_datetime(st.sidebar.date_input("Start Date", min_value=min_date, value=min_date))
+end_date = pd.to_datetime(st.sidebar.date_input("End Date", max_value=max_date, value=max_date))
+
+# Sidebar: select player type
+player_type = st.sidebar.radio("Select Player Type", ["Hitters", "Pitchers"])
+
+# Select dataset based on player type
+if player_type == "Hitters":
     df = hitters_df
-    stats = ['HR', 'RBI', 'BB', 'SO', 'BA', 'OBP', 'SLG', 'OPS']
-    stat_names = ['Home Runs', 'Runs Batted In', 'Walks', 'Strikeouts', 'Batting Average', 'On-Base Percentage', 'Slugging Percentage', 'On-base Plus Slugging']
+    stats = ['BA', 'OBP', 'SLG', 'OPS', 'RBI', 'HR', 'SB']
+    stat_names = ['Batting Average', 'On Base Percentage', 'Slugging Percentage', 'On-base Plus Slugging', 'Runs Batted In', 'Home Runs', 'Stolen Bases']
 else:
     df = pitchers_df
-    stats = ['W', 'L', 'SV', 'SO', 'ERA', 'WHIP']
-    stat_names = ['Wins', 'Losses', 'Saves', 'Strikeouts', 'Earned Run Average', 'Walks plus Hits per Inning Pitched']
+    stats = ['ERA', 'SO', 'BB', 'HBP', 'SV']
+    stat_names = ['Earned Run Average', 'Strikeouts', 'Walks', 'Hit By Pitch', 'Saves']
 
 # Sidebar: player and stat selection
 player_list = df['Players'].dropna().unique().tolist()
@@ -34,14 +59,7 @@ selected_player = st.sidebar.selectbox("Select a player:", sorted(player_list))
 selected_stat_display = st.sidebar.selectbox("Select a statistic:", stat_names)
 selected_stat = stats[stat_names.index(selected_stat_display)]
 
-# Sidebar: date filter
-min_date = df['Date'].min()
-max_date = df['Date'].max()
-
-start_date = pd.to_datetime(st.sidebar.date_input("Start Date", min_value=min_date, value=min_date))
-end_date = pd.to_datetime(st.sidebar.date_input("End Date", max_value=max_date, value=max_date))
-
-# Filter data
+# Filter data based on selected dates and player
 df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
 df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)]
 player_df = df[df['Players'] == selected_player]
