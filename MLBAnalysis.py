@@ -9,82 +9,90 @@ hitters_path = 'data/baseball_data/combined_hitters_data.csv'
 pitchers_path = 'data/baseball_data/combined_pitchers_data.csv'
 schedule_path = 'data/MLB_Schedule.csv'
 
-# Load data
-hitters_df = pd.read_csv(hitters_path)
-pitchers_df = pd.read_csv(pitchers_path)
-schedule_df = pd.read_csv(schedule_path, parse_dates=['Date'], dayfirst=False)
-
-# Convert Date from strings like "Mar 28" to full dates
+# Function to convert "Mar_30" to datetime
 def convert_to_full_date(date_str):
     try:
-        return pd.to_datetime(f"{datetime.now().year} {date_str}", format='%Y %b %d')
+        cleaned = date_str.replace("_", " ")
+        return pd.to_datetime(f"{datetime.now().year} {cleaned}", format='%Y %b %d')
     except:
         return pd.NaT
 
-# Apply to datasets
+# Load and clean data
+hitters_df = pd.read_csv(hitters_path)
+pitchers_df = pd.read_csv(pitchers_path)
+schedule_df = pd.read_csv(schedule_path, parse_dates=['Date'])
+
 hitters_df['Date'] = hitters_df['Date'].apply(convert_to_full_date)
 pitchers_df['Date'] = pitchers_df['Date'].apply(convert_to_full_date)
-schedule_df['Date'] = schedule_df['Date'].apply(convert_to_full_date)
 
-# Add Total Bases to hitters
-for col in ['2B', '3B', 'HR', 'H']:
-    if col not in hitters_df.columns:
-        hitters_df[col] = 0
+# Calculate Total Bases for hitters
+for col in ['H', '2B', '3B', 'HR']:
+    hitters_df[col] = pd.to_numeric(hitters_df[col], errors='coerce').fillna(0)
 hitters_df['1B'] = hitters_df['H'] - hitters_df['2B'] - hitters_df['3B'] - hitters_df['HR']
-hitters_df['TB'] = hitters_df['1B'] + 2*hitters_df['2B'] + 3*hitters_df['3B'] + 4*hitters_df['HR']
+hitters_df['TotalBases'] = (1 * hitters_df['1B'] +
+                            2 * hitters_df['2B'] +
+                            3 * hitters_df['3B'] +
+                            4 * hitters_df['HR'])
 
-# App title
-st.title("MLB Data Viewer (Counts Only)")
+# App Title
+st.title("MLB Stat Viewer (Hitters & Pitchers)")
 
-# Ensure valid date ranges
+# Date Range
 min_date = pd.to_datetime(hitters_df['Date'].min(), errors='coerce')
 max_date = pd.to_datetime(hitters_df['Date'].max(), errors='coerce')
-
 if pd.isna(min_date) or pd.isna(max_date):
-    st.error("Invalid dates found in dataset.")
-    min_date = pd.to_datetime('2020-01-01')
-    max_date = pd.to_datetime('2025-12-31')
+    st.error("No valid dates in dataset.")
+    st.stop()
 
-# Sidebar: date filter
-start_date = pd.to_datetime(st.sidebar.date_input("Start Date", min_value=min_date, value=min_date))
-end_date = pd.to_datetime(st.sidebar.date_input("End Date", max_value=max_date, value=max_date))
+start_date = pd.to_datetime(st.sidebar.date_input("Start Date", value=min_date, min_value=min_date, max_value=max_date))
+end_date = pd.to_datetime(st.sidebar.date_input("End Date", value=max_date, min_value=min_date, max_value=max_date))
 
-# Sidebar: player type
-player_type = st.sidebar.radio("Select Player Type", ["Hitters", "Pitchers"])
+# Player Type
+player_type = st.sidebar.radio("Player Type", ["Hitters", "Pitchers"])
 
-# Stat options
+# Select Data & Stats
 if player_type == "Hitters":
     df = hitters_df
-    stats = ['TB', 'HR', 'RBI', 'SB', 'SO']
-    stat_names = ['Total Bases', 'Home Runs', 'Runs Batted In', 'Stolen Bases', 'Strikeouts']
+    stats = ['RBI', 'HR', 'SB', 'SO', 'TotalBases']
+    stat_names = ['Runs Batted In', 'Home Runs', 'Stolen Bases', 'Strikeouts', 'Total Bases']
 else:
     df = pitchers_df
-    stats = ['SO', 'BB', 'HBP', 'IP', 'H', 'BF', 'Pit']
-    stat_names = ['Strikeouts', 'Walks', 'Hit By Pitch', 'Innings Pitched', 'Hits', 'Batters Faced', 'Pitches Thrown']
+    for col in ['IP', 'H', 'SO', 'BB', 'HBP', 'SV']:
+        if col not in df.columns:
+            df[col] = 0  # in case column missing
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    stats = ['IP', 'H', 'SO', 'BB', 'HBP', 'SV']
+    stat_names = ['Innings Pitched', 'Hits', 'Strikeouts', 'Walks', 'Hit By Pitch', 'Saves']
 
-# Sidebar: player and stat
+# Select Player
 player_list = df['Players'].dropna().unique().tolist()
-selected_player = st.sidebar.selectbox("Select a player:", sorted(player_list))
-selected_stat_display = st.sidebar.selectbox("Select a statistic:", stat_names)
+selected_player = st.sidebar.selectbox("Select Player", sorted(player_list))
+
+# Select Stat
+selected_stat_display = st.sidebar.selectbox("Select Statistic", stat_names)
 selected_stat = stats[stat_names.index(selected_stat_display)]
 
-# Filter player data
+# Filter Data
 df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
 df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)]
-player_df = df[df['Players'] == selected_player].copy()
+player_df = df[df['Players'] == selected_player]
+
+# Ensure numeric
 player_df[selected_stat] = pd.to_numeric(player_df[selected_stat], errors='coerce').dropna()
 
-# Threshold
+# Threshold Input
 max_val = player_df[selected_stat].max()
 default_thresh = player_df[selected_stat].median()
 threshold = st.sidebar.number_input("Set Threshold", min_value=0.0, max_value=float(max_val), value=float(default_thresh), step=0.5)
 
-# --- PIE CHART ---
+# Stat Distribution Pie Chart
 st.subheader(f"{selected_stat_display} Distribution for {selected_player}")
+
 stat_counts = player_df[selected_stat].value_counts().sort_index()
 labels = [f"{int(val)}" if val == int(val) else f"{val:.1f}" for val in stat_counts.index]
 sizes = stat_counts.values
 
+# Pie chart coloring
 colors = []
 color_categories = {'green': 0, 'red': 0, 'gray': 0}
 for val, count in zip(stat_counts.index, stat_counts.values):
@@ -104,10 +112,10 @@ ax1.axis('equal')
 ax1.set_title(f"{selected_stat_display} Value Distribution")
 st.pyplot(fig1)
 
-# Pie chart breakdown
+# Pie breakdown
 total_entries = sum(color_categories.values())
 if total_entries > 0:
-    breakdown_data = {
+    breakdown_df = pd.DataFrame({
         'Color': ['🟩 Green', '🟥 Red', '⬜ Gray'],
         'Category': [
             f"Above {threshold} {selected_stat_display}",
@@ -116,16 +124,15 @@ if total_entries > 0:
         ],
         'Count': [color_categories['green'], color_categories['red'], color_categories['gray']],
         'Percentage': [
-            f"{color_categories['green'] / total_entries:.2%}",
-            f"{color_categories['red'] / total_entries:.2%}",
-            f"{color_categories['gray'] / total_entries:.2%}"
+            f"{color_categories['green']/total_entries:.2%}",
+            f"{color_categories['red']/total_entries:.2%}",
+            f"{color_categories['gray']/total_entries:.2%}"
         ]
-    }
-    st.table(pd.DataFrame(breakdown_data))
-else:
-    st.write("No data available to display pie chart.")
+    })
+    st.markdown("**Pie Chart Color Breakdown:**")
+    st.table(breakdown_df)
 
-# --- TIME SERIES ---
+# Time-Series Chart
 st.subheader(f"{selected_stat_display} Over Time for {selected_player}")
 fig2, ax2 = plt.subplots(figsize=(12, 6))
 data = player_df[['Date', selected_stat]].dropna()
