@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from datetime import datetime
 
 # Paths to the files
 hitters_path = 'data/baseball_data/combined_hitters_data.csv'
@@ -12,6 +13,18 @@ schedule_path = 'data/MLB_Schedule.csv'
 hitters_df = pd.read_csv(hitters_path)
 pitchers_df = pd.read_csv(pitchers_path)
 schedule_df = pd.read_csv(schedule_path, parse_dates=['Date'], dayfirst=False)
+
+# Helper function to convert month-day format to full date (adding current year)
+def convert_to_full_date(date_str):
+    try:
+        return pd.to_datetime(f"{datetime.now().year} {date_str}", format='%Y %b %d')
+    except ValueError:
+        return pd.NaT  # Return Not a Time (NaT) if conversion fails
+
+# Apply the date conversion function
+hitters_df['Date'] = hitters_df['Date'].apply(convert_to_full_date)
+pitchers_df['Date'] = pitchers_df['Date'].apply(convert_to_full_date)
+schedule_df['Date'] = schedule_df['Date'].apply(convert_to_full_date)
 
 # Title of the app
 st.title("MLB Data Viewer")
