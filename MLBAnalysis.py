@@ -27,7 +27,7 @@ pitchers_df['Date'] = pitchers_df['Date'].apply(convert_to_full_date)
 schedule_df['Date'] = schedule_df['Date'].apply(convert_to_full_date)
 
 # Title
-st.title("MLB Player Stat Visualizer (Counts Only)")
+st.title("MLB Player Stat Visualizer")
 
 # Valid date range
 min_date = pd.to_datetime(hitters_df['Date'].min(), errors='coerce')
