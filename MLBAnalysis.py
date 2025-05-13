@@ -4,59 +4,67 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 # File paths
+schedule_path = 'data/MLB_Schedule.csv'
 hitters_path = 'data/baseball_data/combined_hitters_data.csv'
 pitchers_path = 'data/baseball_data/combined_pitchers_data.csv'
-schedule_path = 'data/MLB_Schedule.csv'
 
 # Load data
+schedule_df = pd.read_csv(schedule_path, parse_dates=['Date'], dayfirst=False)
 hitters_df = pd.read_csv(hitters_path)
 pitchers_df = pd.read_csv(pitchers_path)
-schedule_df = pd.read_csv(schedule_path, parse_dates=['Date'], dayfirst=False)
 
 # App title
 st.title("MLB Data Viewer with Pie and Time-Series Charts")
-st.write("Data sourced from MLB game logs and schedules")
+st.write("Data from [Baseball Reference](https://www.baseball-reference.com/)")
 
-# Sidebar: select player type
-player_type = st.sidebar.radio("Select Player Type", ['Hitter', 'Pitcher'])
+# Sidebar: select position
+position = st.sidebar.radio("Select Player Type", ['Hitter', 'Pitcher'])
 
-# Stat mappings
+# Define stat mappings
 stat_map = {
     'Hitter': {
+        'Batting Average (BA)': 'BA',
         'Home Runs': 'HR',
         'Runs Batted In': 'RBI',
-        'Hits': 'H',
-        'Batting Average': 'BA',
         'Strikeouts': 'SO',
-        'Walks': 'BB',
-        'Stolen Bases': 'SB'
+        'Stolen Bases': 'SB',
+        'On-Base % (OBP)': 'OBP',
+        'Slugging % (SLG)': 'SLG',
+        'OPS': 'OPS'
     },
     'Pitcher': {
-        'Earned Run Average': 'ERA',
+        'Earned Run Average (ERA)': 'ERA',
         'Strikeouts': 'SO',
         'Walks': 'BB',
-        'Innings Pitched': 'IP',
-        'Hits Allowed': 'H',
         'Home Runs Allowed': 'HR',
-        'WHIP': 'WHIP'
+        'WHIP': 'WHIP',
+        'Innings Pitched': 'IP'
     }
 }
 
-# Assign dataframe and stats
-df = hitters_df if player_type == 'Hitter' else pitchers_df
-df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-
-stat_options = list(stat_map[player_type].keys())
+# Assign dataframe and stat options
+df = hitters_df if position == 'Hitter' else pitchers_df
+stat_options = list(stat_map[position].keys())
 selected_stat_display = st.sidebar.selectbox("Select a statistic:", stat_options)
-selected_stat = stat_map[player_type][selected_stat_display]
+selected_stat = stat_map[position][selected_stat_display]
 
-# Player selection
+# Ensure date column is valid
+df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+df = df.dropna(subset=['Date'])
+
+# Sidebar: player selection
 player_list = df['Player'].dropna().unique().tolist()
 selected_player = st.sidebar.selectbox("Select a player:", sorted(player_list))
 
-# Date filter
-min_date = df['Date'].min()
-max_date = df['Date'].max()
+# Safe date range fallback
+if not df.empty:
+    min_date = df['Date'].min()
+    max_date = df['Date'].max()
+else:
+    min_date = pd.to_datetime("2023-01-01")
+    max_date = pd.to_datetime("2023-12-31")
+
+# Sidebar: date filter
 start_date = pd.to_datetime(st.sidebar.date_input("Start Date", min_value=min_date, value=min_date))
 end_date = pd.to_datetime(st.sidebar.date_input("End Date", max_value=max_date, value=max_date))
 
@@ -66,9 +74,9 @@ player_df = df[df['Player'] == selected_player].copy()
 player_df[selected_stat] = pd.to_numeric(player_df[selected_stat], errors='coerce').dropna()
 
 # Threshold input
-max_val = player_df[selected_stat].max()
-default_thresh = player_df[selected_stat].median()
-threshold = st.sidebar.number_input("Set Threshold", min_value=0.0, max_value=float(max_val), value=float(default_thresh), step=0.5)
+max_val = player_df[selected_stat].max() if not player_df.empty else 0.0
+default_thresh = player_df[selected_stat].median() if not player_df.empty else 0.0
+threshold = st.sidebar.number_input("Set Threshold", min_value=0.0, max_value=float(max_val) if max_val else 100.0, value=float(default_thresh), step=0.5)
 
 # Pie chart
 st.subheader(f"{selected_stat_display} Distribution for {selected_player}")
@@ -76,7 +84,6 @@ stat_counts = player_df[selected_stat].value_counts().sort_index()
 labels = [f"{int(val)}" if val == int(val) else f"{val:.1f}" for val in stat_counts.index]
 sizes = stat_counts.values
 
-# Color logic
 colors = []
 color_categories = {'green': 0, 'red': 0, 'gray': 0}
 for val, count in zip(stat_counts.index, stat_counts.values):
@@ -90,15 +97,16 @@ for val, count in zip(stat_counts.index, stat_counts.values):
         colors.append('gray')
         color_categories['gray'] += count
 
-fig1, ax1 = plt.subplots()
-ax1.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=colors, textprops={'fontsize': 10})
-ax1.axis('equal')
-ax1.set_title(f"{selected_stat_display} Value Distribution")
-st.pyplot(fig1)
+if sizes.size > 0:
+    fig1, ax1 = plt.subplots()
+    wedges, texts, autotexts = ax1.pie(sizes, labels=labels, autopct='%1.1f%%',
+                                       startangle=140, colors=colors, textprops={'fontsize': 10})
+    ax1.axis('equal')
+    ax1.set_title(f"{selected_stat_display} Value Distribution")
+    st.pyplot(fig1)
 
-# Breakdown table
-total_entries = sum(color_categories.values())
-if total_entries > 0:
+    # Breakdown table
+    total_entries = sum(color_categories.values())
     st.markdown("**Pie Chart Color Breakdown:**")
     breakdown_df = pd.DataFrame({
         'Color': ['🟩 Green', '🟥 Red', '⬜ Gray'],
