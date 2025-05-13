@@ -49,8 +49,9 @@ player_type = st.sidebar.radio("Select Player Type", ["Hitters", "Pitchers"])
 # Select dataset based on player type
 if player_type == "Hitters":
     df = hitters_df
-    stats = ['BA', 'OBP', 'SLG', 'OPS', 'RBI', 'HR', 'SB']
-    stat_names = ['Batting Average', 'On Base Percentage', 'Slugging Percentage', 'On-base Plus Slugging', 'Runs Batted In', 'Home Runs', 'Stolen Bases']
+    # Remove percentage stats and include only count stats
+    stats = ['RBI', 'HR', 'SB', 'H', '2B', '3B']
+    stat_names = ['Runs Batted In', 'Home Runs', 'Stolen Bases', 'Hits', 'Doubles', 'Triples']
 else:
     df = pitchers_df
     stats = ['ERA', 'SO', 'BB', 'HBP', 'SV']
@@ -67,6 +68,14 @@ df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
 df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)]
 player_df = df[df['Players'] == selected_player]
 player_df[selected_stat] = pd.to_numeric(player_df[selected_stat], errors='coerce').dropna()
+
+# If Total Bases is selected, calculate it manually
+if selected_stat == 'Total Bases':
+    player_df['Total Bases'] = (
+        player_df['H'] - player_df['2B'] - player_df['3B'] - player_df['HR'] + 
+        (player_df['2B'] * 2) + (player_df['3B'] * 3) + (player_df['HR'] * 4)
+    )
+    player_df[selected_stat] = player_df['Total Bases']
 
 # Histogram threshold
 max_val = player_df[selected_stat].max()
