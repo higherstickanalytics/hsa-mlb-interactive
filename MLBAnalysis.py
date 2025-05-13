@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 
 # File paths
 hitters_path = 'data/baseball_data/combined_hitters_data.csv'
@@ -13,112 +12,73 @@ hitters_df = pd.read_csv(hitters_path)
 pitchers_df = pd.read_csv(pitchers_path)
 schedule_df = pd.read_csv(schedule_path, parse_dates=['Date'], dayfirst=False)
 
-# App title
-st.title("MLB Data Viewer")
-
-# Sidebar: select position
-position = st.sidebar.radio("Select Player Position", ['Hitters', 'Pitchers'])
-
-# Clean column names
+# Strip any extra spaces from column names
 hitters_df.columns = [col.strip() for col in hitters_df.columns]
 pitchers_df.columns = [col.strip() for col in pitchers_df.columns]
 
-# Ensure 'Players' column exists in both datasets
-if 'Players' not in hitters_df.columns or 'Players' not in pitchers_df.columns:
-    st.error(f"'Players' column not found in the selected position data.")
-    st.stop()
+# Check the first few rows and column names of the Hitters data
+st.write("Hitters Data Columns:")
+st.write(hitters_df.columns)
 
-# Ensure 'Date' column is datetime in both datasets
-if 'Date' in hitters_df.columns:
-    hitters_df['Date'] = pd.to_datetime(hitters_df['Date'], errors='coerce')
-    hitters_df = hitters_df.dropna(subset=['Date'])
-else:
-    st.error("Missing 'Date' column in hitters data.")
-    st.stop()
+st.write("First few rows of Hitters data:")
+st.write(hitters_df.head())
 
-if 'Date' in pitchers_df.columns:
-    pitchers_df['Date'] = pd.to_datetime(pitchers_df['Date'], errors='coerce')
-    pitchers_df = pitchers_df.dropna(subset=['Date'])
-else:
-    st.error("Missing 'Date' column in pitchers data.")
-    st.stop()
+# Check the 'Players' column specifically
+st.write("First few players from the Hitters data:")
+st.write(hitters_df['Players'].head())
 
-# Filter valid players
-if position == 'Hitters':
-    df = hitters_df
-else:
-    df = pitchers_df
+# App title
+st.title("MLB Data Viewer with Pie and Time-Series Charts")
+st.write("Data from [MLB Stats](https://www.mlb.com/)")
 
+# Sidebar: select player type
+player_type = st.sidebar.radio("Select Player Type", ['Hitters', 'Pitchers'])
+
+# Define dataframes and mappings
+df = hitters_df if player_type == 'Hitters' else pitchers_df
 player_list = df['Players'].dropna().unique().tolist()
-if not player_list:
-    st.warning(f"No players found in the {position} data.")
-    st.stop()
 
-# Sidebar: player selection
-selected_player = st.sidebar.selectbox("Select a player:", sorted(player_list))
-
-# Sidebar: date filter
-min_date = df['Date'].min()
-max_date = df['Date'].max()
-start_date = pd.to_datetime(st.sidebar.date_input("Start Date", min_value=min_date, value=min_date))
-end_date = pd.to_datetime(st.sidebar.date_input("End Date", max_value=max_date, value=max_date))
-
-# Filter data based on selected date range and player
-df_filtered = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)]
-player_df = df_filtered[df_filtered['Players'] == selected_player]
-
-# Display the filtered player's data
-st.subheader(f"Data for {selected_player} ({position})")
-st.dataframe(player_df)
-
-# Stat selection (this can be customized based on your needs)
-if position == 'Hitters':
-    stat_options = ['BA', 'OBP', 'SLG', 'HR', 'RBI', 'SB', 'OPS']
+# Check if player_list is empty
+if len(player_list) == 0:
+    st.write("No players found in the selected dataset.")
 else:
-    stat_options = ['ERA', 'SO', 'SV', 'W', 'IP', 'WHIP', 'BB']
+    # Sidebar: player selection
+    selected_player = st.sidebar.selectbox("Select a player:", sorted(player_list))
 
-selected_stat = st.sidebar.selectbox("Select a statistic:", stat_options)
+    # Sidebar: date filter
+    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    min_date = df['Date'].min()
+    max_date = df['Date'].max()
+    start_date = pd.to_datetime(st.sidebar.date_input("Start Date", min_value=min_date, value=min_date))
+    end_date = pd.to_datetime(st.sidebar.date_input("End Date", max_value=max_date, value=max_date))
 
-# Pie chart (distribution of selected stat)
-st.subheader(f"{selected_stat} Distribution for {selected_player}")
-stat_counts = player_df[selected_stat].value_counts().sort_index()
-labels = [f"{int(val)}" if val == int(val) else f"{val:.1f}" for val in stat_counts.index]
-sizes = stat_counts.values
+    # Filter data based on selected player and date range
+    df_filtered = df[(df['Players'] == selected_player) & (df['Date'] >= start_date) & (df['Date'] <= end_date)]
 
-# Color logic for pie chart
-colors = []
-for val, count in zip(stat_counts.index, stat_counts.values):
-    if val > player_df[selected_stat].median():
-        colors.append('green')
-    elif val < player_df[selected_stat].median():
-        colors.append('red')
+    if df_filtered.empty:
+        st.write("No data available for this player in the selected date range.")
     else:
-        colors.append('gray')
+        # Sidebar: stat selection (e.g., Batting Average, ERA)
+        stat_options = ['BA', 'OBP', 'SLG', 'OPS', 'RBI', 'HR', 'SB', 'SO']  # Example for hitters
+        if player_type == 'Pitchers':
+            stat_options += ['ERA', 'SO9', 'WHIP']  # Additional options for pitchers
+        selected_stat = st.sidebar.selectbox("Select a stat to analyze", stat_options)
 
-fig1, ax1 = plt.subplots()
-wedges, texts, autotexts = ax1.pie(sizes, labels=labels, autopct='%1.1f%%',
-                                   startangle=140, colors=colors, textprops={'fontsize': 10})
-ax1.axis('equal')
-ax1.set_title(f"{selected_stat} Distribution")
-st.pyplot(fig1)
+        # Display the filtered data
+        st.subheader(f"Data for {selected_player} ({player_type})")
+        st.write(df_filtered[['Date', 'Players', selected_stat]])
 
-# Time-series plot for the selected stat over time
-st.subheader(f"{selected_stat} Over Time for {selected_player}")
-fig2, ax2 = plt.subplots(figsize=(12, 6))
-data = player_df[['Date', selected_stat]].dropna()
-ax2.plot(data['Date'], data[selected_stat], color='gray', marker='o')
+        # Pie chart for selected stat
+        stat_counts = df_filtered[selected_stat].value_counts().sort_index()
+        fig, ax = plt.subplots()
+        ax.pie(stat_counts, labels=stat_counts.index, autopct='%1.1f%%', startangle=90)
+        ax.axis('equal')
+        st.pyplot(fig)
 
-ax2.set_xlabel("Date")
-ax2.set_ylabel(selected_stat)
-ax2.set_title(f"{selected_stat} Over Time")
-ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-plt.xticks(rotation=45)
-st.pyplot(fig2)
-
-# Summary: games at or above median value
-total_games = len(data)
-count_above_median = sum(data[selected_stat] > player_df[selected_stat].median())
-if total_games > 0:
-    st.write(f"Games at or above median {selected_stat}: {count_above_median}/{total_games} ({count_above_median / total_games:.2%})")
-else:
-    st.write("No data available in selected date range.")
+        # Time-series plot
+        fig2, ax2 = plt.subplots(figsize=(12, 6))
+        ax2.plot(df_filtered['Date'], df_filtered[selected_stat], marker='o', linestyle='-', color='b')
+        ax2.set_xlabel("Date")
+        ax2.set_ylabel(selected_stat)
+        ax2.set_title(f"{selected_stat} Over Time for {selected_player}")
+        st.pyplot(fig2)
