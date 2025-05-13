@@ -29,16 +29,6 @@ schedule_df['Date'] = schedule_df['Date'].apply(convert_to_full_date)
 # Title of the app
 st.title("MLB Data Viewer")
 
-# Display the first 5 rows of each dataset
-st.subheader("First 5 Rows of Hitters Data")
-st.dataframe(hitters_df.head())
-
-st.subheader("First 5 Rows of Pitchers Data")
-st.dataframe(pitchers_df.head())
-
-st.subheader("First 5 Rows of MLB Schedule Data")
-st.dataframe(schedule_df.head())
-
 # Ensure min_date and max_date are valid dates
 min_date = pd.to_datetime(hitters_df['Date'].min(), errors='coerce')
 max_date = pd.to_datetime(hitters_df['Date'].max(), errors='coerce')
