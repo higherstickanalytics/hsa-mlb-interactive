@@ -9,6 +9,7 @@ hitters_path = 'data/baseball_data/combined_hitters_data.csv'
 pitchers_path = 'data/baseball_data/combined_pitchers_data.csv'
 
 hitters_df = pd.read_csv(hitters_path)
+hitters_df = hitters_df[hitters_df['Player'] != "A.J. Puk*"]
 pitchers_df = pd.read_csv(pitchers_path)
 
 # Parse hitters 'Date' column (format MM/DD/YYYY)
