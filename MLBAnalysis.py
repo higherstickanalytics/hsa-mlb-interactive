@@ -11,15 +11,20 @@ pitchers_path = 'data/baseball_data/combined_pitchers_data.csv'
 hitters_df = pd.read_csv(hitters_path)
 pitchers_df = pd.read_csv(pitchers_path)
 
-# Convert 'Date' column like 'Mar_30' to datetime
-def convert_to_date(date_str):
+# Parse hitters 'Date' column (format MM/DD/YYYY)
+hitters_df['Date'] = pd.to_datetime(hitters_df['Date'], format='%m/%d/%Y', errors='coerce')
+
+# Clean and parse pitchers 'Date' column (e.g. 'MarÂ 29' -> 'Mar 29' + current year)
+def clean_and_parse_pitcher_date(date_str):
+    if pd.isna(date_str):
+        return pd.NaT
+    clean_str = date_str.replace('Â', '').replace('\xa0', ' ').strip()
     try:
-        return pd.to_datetime(f"{datetime.now().year} {date_str.replace('_', ' ')}", format='%Y %b %d')
-    except:
+        return pd.to_datetime(f"{datetime.now().year} {clean_str}", format='%Y %b %d')
+    except Exception:
         return pd.NaT
 
-hitters_df['Date'] = hitters_df['Date'].apply(convert_to_date)
-pitchers_df['Date'] = pitchers_df['Date'].apply(convert_to_date)
+pitchers_df['Date'] = pitchers_df['Date'].apply(clean_and_parse_pitcher_date)
 
 # Add Total Bases for hitters
 for col in ['2B', '3B', 'HR', 'H']:
@@ -30,23 +35,18 @@ hitters_df['Total Bases'] = hitters_df['1B'] + 2 * hitters_df['2B'] + 3 * hitter
 # Title
 st.title("MLB Stat Viewer")
 
-# Get min and max dates from hitters data (can switch to pitchers_df if needed)
-min_date = hitters_df['Date'].min()
-max_date = hitters_df['Date'].max()
+# Valid date range across both datasets (or just hitters if you prefer)
+min_date_hitters = hitters_df['Date'].min()
+max_date_hitters = hitters_df['Date'].max()
+min_date_pitchers = pitchers_df['Date'].min()
+max_date_pitchers = pitchers_df['Date'].max()
 
-# Handle NaT if any
-if pd.isna(min_date):
-    min_date = datetime.now()
-if pd.isna(max_date):
-    max_date = datetime.now()
+min_date = min(min_date_hitters, min_date_pitchers)
+max_date = max(max_date_hitters, max_date_pitchers)
 
-# Convert pandas Timestamp to Python datetime.date
-min_date = min_date.date()
-max_date = max_date.date()
-
-# Sidebar: Date filter with corrected default values
-start_date = st.sidebar.date_input("Start Date", value=min_date, min_value=min_date, max_value=max_date)
-end_date = st.sidebar.date_input("End Date", value=max_date, min_value=min_date, max_value=max_date)
+# Sidebar: Date filter
+start_date = st.sidebar.date_input("Start Date", min_value=min_date.date(), max_value=max_date.date(), value=min_date.date())
+end_date = st.sidebar.date_input("End Date", min_value=min_date.date(), max_value=max_date.date(), value=max_date.date())
 
 # Sidebar: Player type
 player_type = st.sidebar.radio("Select Player Type", ["Hitters", "Pitchers"])
@@ -71,22 +71,23 @@ else:
         "Hits Allowed": "H"
     }
 
-# Sidebar: Player and stat
+# Sidebar: Player and stat selection
+# Use 'Player' column as per your CSV samples
 player_list = df['Player'].dropna().unique().tolist()
 selected_player = st.sidebar.selectbox("Select a player:", sorted(player_list))
 stat_label = st.sidebar.selectbox("Select a statistic:", list(stats.keys()))
 selected_stat = stats[stat_label]
 
-# Filter data by date range and player
+# Filter by date and player
 df = df[(df['Date'] >= pd.to_datetime(start_date)) & (df['Date'] <= pd.to_datetime(end_date))]
 player_df = df[df['Player'] == selected_player]
 
-# Convert selected_stat to numeric and drop NA for plotting
+# Convert selected stat column to numeric and drop NA
 player_df[selected_stat] = pd.to_numeric(player_df[selected_stat], errors='coerce')
 player_df = player_df.dropna(subset=[selected_stat])
 
-# Threshold
-max_val = player_df[selected_stat].max() if not player_df.empty else 0
+# Threshold for coloring
+max_val = player_df[selected_stat].max() if not player_df.empty else 1
 default_thresh = player_df[selected_stat].median() if not player_df.empty else 0
 threshold = st.sidebar.number_input("Set Threshold", min_value=0.0, max_value=float(max_val), value=float(default_thresh), step=0.5)
 
@@ -99,6 +100,7 @@ sizes = stat_counts.values
 colors = []
 color_categories = {'green': 0, 'red': 0, 'gray': 0}
 reverse_color = player_type == "Pitchers" and selected_stat in ["H", "BB", "HBP"]
+
 for val, count in zip(stat_counts.index, stat_counts.values):
     if (val > threshold and not reverse_color) or (val < threshold and reverse_color):
         colors.append("green")
@@ -140,6 +142,7 @@ if total_entries > 0:
 st.subheader(f"{stat_label} Over Time for {selected_player}")
 fig2, ax2 = plt.subplots(figsize=(12, 6))
 data = player_df[['Date', selected_stat]].dropna()
+
 bars = ax2.bar(data['Date'], data[selected_stat], color='gray', edgecolor='black')
 
 count_above = 0
@@ -162,7 +165,7 @@ plt.xticks(rotation=45)
 ax2.legend()
 st.pyplot(fig2)
 
-# Proportion
+# Proportion of games at or above threshold
 total_games = len(data)
 if total_games > 0:
     st.write(f"Games at or above threshold: {count_above}/{total_games} ({count_above / total_games:.2%})")
