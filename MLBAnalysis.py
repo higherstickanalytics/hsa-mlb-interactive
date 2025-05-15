@@ -11,37 +11,40 @@ pitchers_path = 'data/baseball_data/combined_pitchers_data.csv'
 hitters_df = pd.read_csv(hitters_path)
 pitchers_df = pd.read_csv(pitchers_path)
 
-# Convert 'Date' column like 'Mar_30' to datetime
+# Function to convert 'Date' strings like 'Mar_30' to datetime with current year
 def convert_to_date(date_str):
     try:
         return pd.to_datetime(f"{datetime.now().year} {date_str.replace('_', ' ')}", format='%Y %b %d')
-    except:
+    except Exception:
         return pd.NaT
 
+# Apply date conversion
 hitters_df['Date'] = hitters_df['Date'].apply(convert_to_date)
 pitchers_df['Date'] = pitchers_df['Date'].apply(convert_to_date)
 
-# Add Total Bases for hitters
+# Calculate Total Bases for hitters
 for col in ['2B', '3B', 'HR', 'H']:
     hitters_df[col] = pd.to_numeric(hitters_df[col], errors='coerce')
 hitters_df['1B'] = hitters_df['H'] - hitters_df['2B'] - hitters_df['3B'] - hitters_df['HR']
 hitters_df['Total Bases'] = hitters_df['1B'] + 2 * hitters_df['2B'] + 3 * hitters_df['3B'] + 4 * hitters_df['HR']
 
-# Title
+# Streamlit app title
 st.title("MLB Stat Viewer")
 
-# Valid date range
-min_date = pd.to_datetime(hitters_df['Date'].min(), errors='coerce')
-max_date = pd.to_datetime(hitters_df['Date'].max(), errors='coerce')
+# Prepare min and max dates for date_input widgets (convert pandas Timestamp to datetime.date)
+min_date = hitters_df['Date'].min()
+max_date = hitters_df['Date'].max()
+min_date = min_date.date() if pd.notna(min_date) else datetime.now().date()
+max_date = max_date.date() if pd.notna(max_date) else datetime.now().date()
 
-# Sidebar: Date filter
+# Sidebar date inputs with bounds
 start_date = st.sidebar.date_input("Start Date", min_value=min_date, value=min_date)
 end_date = st.sidebar.date_input("End Date", max_value=max_date, value=max_date)
 
-# Sidebar: Player type
+# Sidebar to select player type
 player_type = st.sidebar.radio("Select Player Type", ["Hitters", "Pitchers"])
 
-# Stat options
+# Select dataset and stats dictionary based on player type
 if player_type == "Hitters":
     df = hitters_df
     stats = {
@@ -61,32 +64,42 @@ else:
         "Hits Allowed": "H"
     }
 
-# Sidebar: Player and stat
-player_list = df['Players'].dropna().unique().tolist()
+# Get unique player list and select player
+player_list = df['Player'].dropna().unique().tolist()
 selected_player = st.sidebar.selectbox("Select a player:", sorted(player_list))
+
+# Select stat
 stat_label = st.sidebar.selectbox("Select a statistic:", list(stats.keys()))
 selected_stat = stats[stat_label]
 
-# Filter and convert
+# Filter data by date range and player
 df = df[(df['Date'] >= pd.to_datetime(start_date)) & (df['Date'] <= pd.to_datetime(end_date))]
-player_df = df[df['Players'] == selected_player]
-player_df[selected_stat] = pd.to_numeric(player_df[selected_stat], errors='coerce').dropna()
+player_df = df[df['Player'] == selected_player]
 
-# Threshold
+# Convert selected stat to numeric and drop missing values
+player_df[selected_stat] = pd.to_numeric(player_df[selected_stat], errors='coerce')
+player_df = player_df.dropna(subset=[selected_stat])
+
+# Handle empty data
+if player_df.empty:
+    st.write("No data available for this player and date range.")
+    st.stop()
+
+# Determine threshold for coloring
 max_val = player_df[selected_stat].max()
 default_thresh = player_df[selected_stat].median()
 threshold = st.sidebar.number_input("Set Threshold", min_value=0.0, max_value=float(max_val), value=float(default_thresh), step=0.5)
 
-# Pie chart
-st.subheader(f"{stat_label} Distribution for {selected_player}")
+# Prepare data for pie chart
 stat_counts = player_df[selected_stat].value_counts().sort_index()
 labels = [f"{int(val)}" if val == int(val) else f"{val:.1f}" for val in stat_counts.index]
 sizes = stat_counts.values
 
-# Color rules
+# Coloring logic for pie chart slices
 colors = []
 color_categories = {'green': 0, 'red': 0, 'gray': 0}
 reverse_color = player_type == "Pitchers" and selected_stat in ["H", "BB", "HBP"]
+
 for val, count in zip(stat_counts.index, stat_counts.values):
     if (val > threshold and not reverse_color) or (val < threshold and reverse_color):
         colors.append("green")
@@ -98,13 +111,14 @@ for val, count in zip(stat_counts.index, stat_counts.values):
         colors.append("gray")
         color_categories["gray"] += count
 
+# Pie chart
 fig1, ax1 = plt.subplots()
 ax1.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=colors)
 ax1.axis('equal')
-ax1.set_title(f"{stat_label} Distribution")
+ax1.set_title(f"{stat_label} Distribution for {selected_player}")
 st.pyplot(fig1)
 
-# Breakdown table
+# Pie chart color breakdown table
 total_entries = sum(color_categories.values())
 if total_entries > 0:
     st.markdown("**Pie Chart Color Breakdown:**")
@@ -124,7 +138,7 @@ if total_entries > 0:
     })
     st.table(breakdown_df)
 
-# Time-series bar chart
+# Time-series bar chart of stat over time
 st.subheader(f"{stat_label} Over Time for {selected_player}")
 fig2, ax2 = plt.subplots(figsize=(12, 6))
 data = player_df[['Date', selected_stat]].dropna()
@@ -150,7 +164,7 @@ plt.xticks(rotation=45)
 ax2.legend()
 st.pyplot(fig2)
 
-# Proportion
+# Show proportion of games at or above threshold
 total_games = len(data)
 if total_games > 0:
     st.write(f"Games at or above threshold: {count_above}/{total_games} ({count_above / total_games:.2%})")
