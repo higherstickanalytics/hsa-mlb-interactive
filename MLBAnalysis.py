@@ -74,7 +74,7 @@ else:
 
 # Sidebar: Player and stat selection
 # Use 'Player' column as per your CSV samples
-player_list = df['Player'].dropna().unique().tolist()
+player_list = [p for p in df['Player'].dropna().unique().tolist() if p.replace(' ', '').isalpha()]
 selected_player = st.sidebar.selectbox("Select a player:", sorted(player_list))
 stat_label = st.sidebar.selectbox("Select a statistic:", list(stats.keys()))
 selected_stat = stats[stat_label]
