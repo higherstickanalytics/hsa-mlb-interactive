@@ -36,7 +36,7 @@ hitters_df['Total Bases'] = hitters_df['1B'] + 2 * hitters_df['2B'] + 3 * hitter
 # Title
 st.title("MLB Stat Viewer")
 
-# Valid date range across both datasets (or just hitters if you prefer)
+# Valid date range across both datasets
 min_date_hitters = hitters_df['Date'].min()
 max_date_hitters = hitters_df['Date'].max()
 min_date_pitchers = pitchers_df['Date'].min()
@@ -73,9 +73,17 @@ else:
     }
 
 # Sidebar: Player and stat selection
-# Use 'Player' column as per your CSV samples
-player_list = [p for p in df['Player'].dropna().unique().tolist() if p.replace(' ', '').isalpha()]
-selected_player = st.sidebar.selectbox("Select a player:", sorted(player_list))
+player_list = df['Player'].dropna().unique().tolist()
+# Clean player names for display (letters and spaces only)
+player_display_map = {p: ''.join(c for c in p if c.isalpha() or c == ' ') for p in player_list}
+display_names = [player_display_map[p] for p in player_list]
+
+# Use display names in dropdown
+selected_display = st.sidebar.selectbox("Select a player:", sorted(display_names))
+# Map back to original player name
+selected_player = next(p for p in player_list if player_display_map[p] == selected_display)
+
+# Stat selection
 stat_label = st.sidebar.selectbox("Select a statistic:", list(stats.keys()))
 selected_stat = stats[stat_label]
 
@@ -83,7 +91,7 @@ selected_stat = stats[stat_label]
 df = df[(df['Date'] >= pd.to_datetime(start_date)) & (df['Date'] <= pd.to_datetime(end_date))]
 player_df = df[df['Player'] == selected_player]
 
-# Convert selected stat column to numeric and drop NA
+# Convert stat column to numeric
 player_df[selected_stat] = pd.to_numeric(player_df[selected_stat], errors='coerce')
 player_df = player_df.dropna(subset=[selected_stat])
 
@@ -93,7 +101,7 @@ default_thresh = player_df[selected_stat].median() if not player_df.empty else 0
 threshold = st.sidebar.number_input("Set Threshold", min_value=0.0, max_value=float(max_val), value=float(default_thresh), step=0.5)
 
 # Pie chart
-st.subheader(f"{stat_label} Distribution for {selected_player}")
+st.subheader(f"{stat_label} Distribution for {selected_display}")
 stat_counts = player_df[selected_stat].value_counts().sort_index()
 labels = [f"{int(val)}" if val == int(val) else f"{val:.1f}" for val in stat_counts.index]
 sizes = stat_counts.values
@@ -140,7 +148,7 @@ if total_entries > 0:
     st.table(breakdown_df)
 
 # Time-series bar chart
-st.subheader(f"{stat_label} Over Time for {selected_player}")
+st.subheader(f"{stat_label} Over Time for {selected_display}")
 fig2, ax2 = plt.subplots(figsize=(12, 6))
 data = player_df[['Date', selected_stat]].dropna()
 
